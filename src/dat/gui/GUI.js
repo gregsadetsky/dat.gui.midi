@@ -1398,13 +1398,11 @@ function listenMidiMessages(gui) {
         return;
       }
 
-      // support number controllers only for now
       if(!(
-        // number message and number controller?
         (gui.__midi.autoMappingCurrentController instanceof NumberController && message.command === 11) ||
         (gui.__midi.autoMappingCurrentController instanceof BooleanController && message.command === 9) ||
-        (gui.__midi.autoMappingCurrentController instanceof FunctionController && message.command === 9)
-        // TODO on message and bool/function controller?
+        (gui.__midi.autoMappingCurrentController instanceof FunctionController && message.command === 9) ||
+        (gui.__midi.autoMappingCurrentController instanceof ColorController && message.command === 11)
         )) {
         return;
       }
@@ -1494,8 +1492,10 @@ function listenMidiMessages(gui) {
         controller.setValue(!controller.getValue());
       } else if(controller instanceof FunctionController) {
         controller.fire();
+      } else if(controller instanceof ColorController) {
+        controller.__color.h = (message.velocity/127) * 360;
+        controller.setValue(controller.__color.toOriginal());
       }
-      // TODO handle boolean/function with button presses
     }
   }
 
