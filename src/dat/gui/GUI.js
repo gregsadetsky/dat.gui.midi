@@ -795,6 +795,7 @@ common.extend(
           autoMappingMessageQueue: [],
           debug: false,
           debugDialog: null,
+          helpDialog: null,
           settings: {
             mapping: {
               // key: input.id
@@ -1382,8 +1383,8 @@ function listenMidiMessages(gui) {
     }
 
     // support value changes (11)
-    // TODO button presses (9)
-    if(!(message.command === 11)) {
+    if(!(message.command === 11 ||
+        message.command === 9)) {
       return;
     }
 
@@ -1400,7 +1401,8 @@ function listenMidiMessages(gui) {
       // support number controllers only for now
       if(!(
         // number message and number controller?
-        (gui.__midi.autoMappingCurrentController instanceof NumberController && message.command === 11)
+        (gui.__midi.autoMappingCurrentController instanceof NumberController && message.command === 11) ||
+        (gui.__midi.autoMappingCurrentController instanceof BooleanController && message.command === 9)
         // TODO on message and bool/function controller?
         )) {
         return;
@@ -1487,6 +1489,8 @@ function listenMidiMessages(gui) {
           // min and max defined -- map midi to range
           controller.setValue(controller.__min + (message.velocity/127) * (controller.__max - controller.__min));
         }
+      } else if(controller instanceof BooleanController) {
+        controller.setValue(!controller.getValue());
       }
       // TODO handle boolean/function with button presses
     }
@@ -1576,9 +1580,14 @@ function addMidiMenu(gui) {
   debugButton.innerHTML = 'Debug';
   dom.addClass(debugButton, 'button');
 
+  const helpButton = document.createElement('span');
+  helpButton.innerHTML = 'Help';
+  dom.addClass(helpButton, 'button');
+
   div.appendChild(midiMessageIndicator);
   div.appendChild(automapButton);
   div.appendChild(debugButton);
+  div.appendChild(helpButton);
 
   dom.bind(automapButton, 'click', function() {
     midiAutoMappingButtonHandler(gui, this);
@@ -1597,6 +1606,18 @@ function addMidiMenu(gui) {
     };
     debugDialog.show();
     gui.__midi.debug = true;
+  });
+
+  dom.bind(helpButton, 'click', function() {
+    const helpDialog = gui.__midi.helpDialog = gui.__midi.helpDialog || new CenteredDiv();
+    helpDialog.domElement.innerHTML = `
+      <div id="dg-midi-help" class="dg dialogue">
+        <div>Click 'MIDI Automap' and turn a knob or press a button on your MIDI controller <b>5 times</b>. Once the automapper detects this, and is able to map your controller, the parameter will turn to green. Click 'MIDI Automap' again to leave the automapping mode.</div>
+        <div>Velocity messages (typically, from knobs and sliders) can be mapped to numeric parameters. Note on/off messages (typically, from buttons) can be mapped to boolean and function parameters.</div>
+        <div>Troubleshooting: Make sure that the browser sees your MIDI devices and is receiving its messages by clicking the 'Debug' button.</div>
+      </div>
+    `;
+    helpDialog.show();
   });
 }
 
