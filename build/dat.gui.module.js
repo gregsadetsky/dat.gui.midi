@@ -2485,9 +2485,15 @@ function listenMidiMessages(gui) {
   function messageHandler(message, inputId) {
     message = parseMidiMessage(message);
     console.log('message', message);
+    if (!(message.command === 11 || message.command === 9)) {
+      return;
+    }
     if (gui.__midi.autoMapping) {
       if (gui.__midi.autoMappingCurrentController === null) {
         gui.__midi.autoMappingMessageQueue = [];
+        return;
+      }
+      if (!(gui.__midi.autoMappingCurrentController instanceof NumberControllerSlider || gui.__midi.autoMappingCurrentController instanceof NumberControllerBox)) {
         return;
       }
       if (gui.__midi.autoMappingMessageQueue.length === 5) {
@@ -2516,13 +2522,18 @@ function listenMidiMessages(gui) {
         dom.removeClass(controllerEl, 'midiMappingSetNow');
       }, 500);
     } else {
+      if (typeof gui.__midi.settings.mapping[inputId] === 'undefined') {
+        return;
+      }
+      if (typeof gui.__midi.settings.mapping[inputId][message.note] === 'undefined') {
+        return;
+      }
+      gui.__midi.settings.mapping[inputId][message.note].setValue(message.velocity * 255);
     }
-    console.log('message', message, 'autoMapping?', gui.__midi.autoMapping);
   }
   var selectedInputId = gui.__midi.settings.selectedInputId;
   gui.__midi.access.inputs.forEach(function (input, inputId) {
     if (inputId === selectedInputId) {
-      console.log('setting onmidimessage');
       input.onmidimessage = function (message) {
         messageHandler(message, inputId);
       };
@@ -2547,16 +2558,20 @@ function midiAutoMappingButtonHandler(gui, button) {
     });
   }
   controllerWalker(gui, function (controller) {
+    function mouseOverHandler() {
+      gui.__midi.autoMappingCurrentController = controller;
+    }
+    function mouseOutHandler() {
+      gui.__midi.autoMappingCurrentController = null;
+    }
     if (autoMapping) {
       dom.addClass(controller.__li, 'midiAutoMapping');
-      dom.bind(controller.__li, 'mouseover', function () {
-        gui.__midi.autoMappingCurrentController = controller;
-      });
-      dom.bind(controller.__li, 'mouseout', function () {
-        gui.__midi.autoMappingCurrentController = null;
-      });
+      dom.bind(controller.__li, 'mouseover', mouseOverHandler);
+      dom.bind(controller.__li, 'mouseout', mouseOutHandler);
     } else {
       dom.removeClass(controller.__li, 'midiAutoMapping');
+      dom.unbind(controller.__li, 'mouseover', mouseOverHandler);
+      dom.unbind(controller.__li, 'mouseout', mouseOutHandler);
     }
   });
   if (!autoMapping) {
@@ -2566,7 +2581,6 @@ function midiAutoMappingButtonHandler(gui, button) {
 }
 function addMidiMenu(gui) {
   var div = gui.__midi_row = document.createElement('li');
-  dom.addClass(gui.domElement, 'has-midi');
   if (gui.__ul.firstChild === gui.__save_row) {
     gui.__ul.insertBefore(div, gui.__ul.firstChild.nextSibling);
   } else {
@@ -2576,7 +2590,6 @@ function addMidiMenu(gui) {
   var automapButton = document.createElement('span');
   automapButton.innerHTML = 'MIDI Automap';
   dom.addClass(automapButton, 'button');
-  dom.addClass(automapButton, 'save');
   var select = gui.__preset_select = document.createElement('select');
   gui.__midi.access.inputs.forEach(function (input, inputId) {
     var option = document.createElement('option');
