@@ -771,6 +771,44 @@ common.extend(
       }
     },
 
+    enableMidi: function() {
+      if (this.parent) {
+        throw new Error('You can only call remember on a top level GUI.');
+      }
+
+      if (!navigator.requestMIDIAccess) {
+        throw new Error('MIDI access not supported by this browser');
+      }
+
+      navigator.requestMIDIAccess().then((access) => {
+        this.__midi = {
+          access,
+          autoMapping: false,
+          // in automapping mode, which controller is being hovered over?
+          autoMappingCurrentController: null,
+          // collect some (5?) messages in automapping mode and check that
+          // they're all from the same note before setting the mapping
+          // to denoise spurious messages
+          autoMappingMessageQueue: [],
+          settings: {
+            mapping: {
+              // key: input.id
+              // value: map
+              //  key: midi note
+              //  value: controller object
+            },
+            selectedInputId: [...access.inputs][0][1].id
+          }
+        };
+
+        addMidiMenu(this);
+
+        listenMidiMessages(this);
+      }, (e) => {
+        throw new Error(`MIDI access was denied: ${e}`);
+      });
+    },
+
     /**
      * @returns {dat.gui.GUI} the topmost parent GUI of a nested GUI.
      * @instance
@@ -1299,6 +1337,178 @@ function addSaveMenu(gui) {
   });
 
   // div.appendChild(button2);
+}
+
+function listenMidiMessages(gui) {
+  // https://stackoverflow.com/a/40902865/426790
+  function parseMidiMessage(message) {
+    return {
+      command: message.data[0] >> 4,
+      channel: message.data[0] & 0xf,
+      note: message.data[1],
+      velocity: message.data[2] / 127
+    }
+  }
+
+  function messageHandler(message, inputId) {
+    message = parseMidiMessage(message);
+    console.log('message', message);
+
+    if(gui.__midi.autoMapping) {
+      // mapping message
+
+      if(gui.__midi.autoMappingCurrentController === null) {
+        // no controller to map to --
+        // reset message queue and bail
+        gui.__midi.autoMappingMessageQueue = [];
+        return;
+      }
+
+      // fill queue with up to 5 last messages.
+      if(gui.__midi.autoMappingMessageQueue.length === 5) {
+        gui.__midi.autoMappingMessageQueue.shift();
+      }
+      gui.__midi.autoMappingMessageQueue.push(message);
+
+      // queue not filled yet
+      if(gui.__midi.autoMappingMessageQueue.length < 5) {
+        return;
+      }
+
+      // are all messages in the queue from the same note?
+      const foundNotes = {};
+      gui.__midi.autoMappingMessageQueue.forEach(currMessage => {
+        foundNotes[currMessage.note] = true;
+      });
+
+      // more than a single note found, wait for things to stabilize before mapping
+      if(Object.keys(foundNotes).length !== 1) {
+        return;
+      }
+
+      // ready to map!
+      if(typeof gui.__midi.settings.mapping[inputId] === 'undefined') {
+        gui.__midi.settings.mapping[inputId] = {};
+      }
+
+      gui.__midi.settings.mapping[inputId][message.note] = gui.__midi.autoMappingCurrentController;
+
+      const controllerEl = gui.__midi.autoMappingCurrentController.__li
+
+      dom.removeClass(controllerEl, 'midiMappingNotSet');
+      dom.addClass(controllerEl, 'midiMappingSet');
+
+      // flash
+      dom.addClass(controllerEl, 'midiMappingSetNow');
+      setTimeout(() => {
+        dom.removeClass(controllerEl, 'midiMappingSetNow');
+      }, 500);
+    } else {
+      // regular message
+      // TODO check do we support this kind of message?
+      // TODO check is there mapping for this midi channel/message?
+      // TODO change controller value
+    }
+
+    console.log('message', message, 'autoMapping?', gui.__midi.autoMapping);
+  }
+
+  const selectedInputId = gui.__midi.settings.selectedInputId;
+
+  gui.__midi.access.inputs.forEach((input, inputId) => {
+    if(inputId === selectedInputId) {
+      console.log('setting onmidimessage');
+      input.onmidimessage = message => {
+        messageHandler(message, inputId)
+      };
+    } else {
+      input.onmidimessage = null;
+    }  
+  });
+}
+
+function midiAutoMappingButtonHandler(gui, button) {
+  // midi mapping in action?
+  const autoMapping = gui.__midi.autoMapping = !(gui.__midi.autoMapping);
+
+  // toggle button class
+  if(autoMapping) {
+    dom.addClass(button, 'midiAutoMapping');
+  } else {
+    dom.removeClass(button, 'midiAutoMapping');
+  }
+
+  function controllerWalker(currGui, callback) {
+    // walk through all controllers
+    currGui.__controllers.forEach(controller => callback(controller));
+
+    // and recurse into all __folders
+    Object.values(currGui.__folders).forEach(folder => {
+      controllerWalker(folder, callback)
+    });
+  }
+
+  controllerWalker(gui, controller => {
+    if(autoMapping) {
+      dom.addClass(controller.__li, 'midiAutoMapping');
+      dom.bind(controller.__li, 'mouseover', () => {
+        // set global link to currently hovered controller
+        gui.__midi.autoMappingCurrentController = controller;
+      });
+      dom.bind(controller.__li, 'mouseout', () => {
+        // clear global link to currently hovered controller
+        gui.__midi.autoMappingCurrentController = null;
+      })
+    } else {
+      dom.removeClass(controller.__li, 'midiAutoMapping');
+    }
+  });
+
+  // cleanup
+  if(!autoMapping) {
+    gui.__midi.autoMappingCurrentController = null;
+    gui.__midi.autoMappingMessageQueue = [];
+  }
+}
+
+function addMidiMenu(gui) {
+  const div = gui.__midi_row = document.createElement('li');
+
+  dom.addClass(gui.domElement, 'has-midi');
+
+  if(gui.__ul.firstChild === gui.__save_row) {
+    // save is present, go under it
+    gui.__ul.insertBefore(div, gui.__ul.firstChild.nextSibling);
+  } else {
+    // insert as the topmost row
+    gui.__ul.insertBefore(div, gui.__ul.firstChild);
+  }
+
+  dom.addClass(div, 'save-row');
+
+  const automapButton = document.createElement('span');
+  automapButton.innerHTML = 'MIDI Automap';
+  dom.addClass(automapButton, 'button');
+  dom.addClass(automapButton, 'save');
+
+  const select = gui.__preset_select = document.createElement('select');
+  gui.__midi.access.inputs.forEach((input, inputId) => {
+    const option = document.createElement('option');
+    option.value = inputId;
+    option.innerHTML = input.name;
+    select.appendChild(option);
+  });
+  dom.bind(select, 'change', function() {
+    gui.__midi.settings.selectedInputIdx = select.options[select.selectedIndex].value;
+    listenMidiMessages(gui);
+  });
+
+  div.appendChild(select);
+  div.appendChild(automapButton);
+
+  dom.bind(automapButton, 'click', function() {
+    midiAutoMappingButtonHandler(gui, this);
+  });
 }
 
 function addResizeHandle(gui) {

@@ -81,7 +81,7 @@ $input-color: lighten($background-color, 8.5%);
       border-bottom: 1px solid $border-color;
     }
 
-    &.save-row {
+    &.save-row, &.midi-row {
 
       line-height: 25px;
       background: $save-row-color;
@@ -104,6 +104,10 @@ $input-color: lighten($background-color, 8.5%);
         &:hover {
           background-color: darken($button-color, 5%);
           box-shadow: 0 -1px 0 darken($button-color, 10%);
+        }
+
+        &.midiAutoMapping {
+          background: red;
         }
 
       }
@@ -161,6 +165,24 @@ $input-color: lighten($background-color, 8.5%);
       background: #111;
     }
 
+    &.midiAutoMapping {
+      &.midiMappingSet {
+        background: green;
+      }
+
+      &.midiMappingNotSet {
+        background: red;
+      }
+
+      &:hover {
+        background: purple;
+      }
+
+      &.midiMappingSetNow {
+        transition: background-color 0.5s ease;
+        background: green;
+      }
+    }
   }
 
   /** Controllers */
