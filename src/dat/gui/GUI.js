@@ -1402,7 +1402,8 @@ function listenMidiMessages(gui) {
       if(!(
         // number message and number controller?
         (gui.__midi.autoMappingCurrentController instanceof NumberController && message.command === 11) ||
-        (gui.__midi.autoMappingCurrentController instanceof BooleanController && message.command === 9)
+        (gui.__midi.autoMappingCurrentController instanceof BooleanController && message.command === 9) ||
+        (gui.__midi.autoMappingCurrentController instanceof FunctionController && message.command === 9)
         // TODO on message and bool/function controller?
         )) {
         return;
@@ -1491,6 +1492,8 @@ function listenMidiMessages(gui) {
         }
       } else if(controller instanceof BooleanController) {
         controller.setValue(!controller.getValue());
+      } else if(controller instanceof FunctionController) {
+        controller.fire();
       }
       // TODO handle boolean/function with button presses
     }
@@ -1615,6 +1618,7 @@ function addMidiMenu(gui) {
         <div>Click 'MIDI Automap' and turn a knob or press a button on your MIDI controller <b>5 times</b>. Once the automapper detects this, and is able to map your controller, the parameter will turn to green. Click 'MIDI Automap' again to leave the automapping mode.</div>
         <div>Velocity messages (typically, from knobs and sliders) can be mapped to numeric parameters. Note on/off messages (typically, from buttons) can be mapped to boolean and function parameters.</div>
         <div>Troubleshooting: Make sure that the browser sees your MIDI devices and is receiving its messages by clicking the 'Debug' button.</div>
+        <div>Project homepage: <a target="_blank" href="https://github.com/gregsadetsky/dat.gui.midi">https://github.com/gregsadetsky/dat.gui.midi</a></div>
       </div>
     `;
     helpDialog.show();
