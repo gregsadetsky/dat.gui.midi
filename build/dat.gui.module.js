@@ -2490,7 +2490,7 @@ function listenMidiMessages(gui) {
         gui.__midi.autoMappingMessageQueue = [];
         return;
       }
-      if (!(gui.__midi.autoMappingCurrentController instanceof NumberController && message.command === 11 || gui.__midi.autoMappingCurrentController instanceof BooleanController && message.command === 9 || gui.__midi.autoMappingCurrentController instanceof FunctionController && message.command === 9 || gui.__midi.autoMappingCurrentController instanceof ColorController && message.command === 11)) {
+      if (!(gui.__midi.autoMappingCurrentController instanceof NumberController && message.command === 11 || gui.__midi.autoMappingCurrentController instanceof BooleanController && message.command === 9 || gui.__midi.autoMappingCurrentController instanceof FunctionController && message.command === 9 || gui.__midi.autoMappingCurrentController instanceof ColorController && message.command === 11 || gui.__midi.autoMappingCurrentController instanceof OptionController && message.command === 11)) {
         return;
       }
       indicateMessageReceived();
@@ -2549,6 +2549,9 @@ function listenMidiMessages(gui) {
       } else if (controller instanceof ColorController) {
         controller.__color.h = message.velocity / 127 * 360;
         controller.setValue(controller.__color.toOriginal());
+      } else if (controller instanceof OptionController) {
+        var optionIndex = parseInt((message.velocity - 1) / 127 * controller.__select.options.length);
+        controller.setValue(controller.__select.options[optionIndex].value);
       }
     }
   }

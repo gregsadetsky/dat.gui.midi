@@ -15,6 +15,7 @@ import css from '../utils/css';
 import saveDialogueContents from './saveDialogue.html';
 import ControllerFactory from '../controllers/ControllerFactory';
 import Controller from '../controllers/Controller';
+import OptionController from '../controllers/OptionController';
 import BooleanController from '../controllers/BooleanController';
 import FunctionController from '../controllers/FunctionController';
 import NumberController from '../controllers/NumberController';
@@ -1402,7 +1403,8 @@ function listenMidiMessages(gui) {
         (gui.__midi.autoMappingCurrentController instanceof NumberController && message.command === 11) ||
         (gui.__midi.autoMappingCurrentController instanceof BooleanController && message.command === 9) ||
         (gui.__midi.autoMappingCurrentController instanceof FunctionController && message.command === 9) ||
-        (gui.__midi.autoMappingCurrentController instanceof ColorController && message.command === 11)
+        (gui.__midi.autoMappingCurrentController instanceof ColorController && message.command === 11) ||
+        (gui.__midi.autoMappingCurrentController instanceof OptionController && message.command === 11)
         )) {
         return;
       }
@@ -1495,6 +1497,10 @@ function listenMidiMessages(gui) {
       } else if(controller instanceof ColorController) {
         controller.__color.h = (message.velocity/127) * 360;
         controller.setValue(controller.__color.toOriginal());
+      } else if(controller instanceof OptionController) {
+        // velocity - 1 so that it never gets to 127, becoming options.length
+        const optionIndex = parseInt((message.velocity-1)/127 * controller.__select.options.length);
+        controller.setValue(controller.__select.options[optionIndex].value);
       }
     }
   }
