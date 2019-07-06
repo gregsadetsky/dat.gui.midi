@@ -74,6 +74,10 @@ class CenteredDiv {
    * Hide centered div
    */
   hide() {
+    if(this.onhide) {
+      this.onhide();
+    }
+
     const _this = this;
 
     const hide = function() {

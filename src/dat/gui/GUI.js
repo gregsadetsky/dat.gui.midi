@@ -793,6 +793,8 @@ common.extend(
           // they're all from the same note before setting the mapping
           // to denoise spurious messages
           autoMappingMessageQueue: [],
+          debug: false,
+          debugDialog: null,
           settings: {
             mapping: {
               // key: input.id
@@ -1348,7 +1350,7 @@ function listenMidiMessages(gui) {
       command: message.data[0] >> 4,
       channel: message.data[0] & 0xf,
       note: message.data[1],
-      velocity: message.data[2] / 127
+      velocity: message.data[2]
     }
   }
 
@@ -1362,6 +1364,22 @@ function listenMidiMessages(gui) {
 
     message = parseMidiMessage(message);
     console.log('message', message);
+
+    if(gui.__midi.debug) {
+      const textarea = document.querySelector('#dg-midi-debug textarea')
+      const messageParts = Object.keys(message).sort().map(key => {
+        return`${key}: ${message[key]}`;
+      });
+
+      let inputName = null;
+      gui.__midi.access.inputs.forEach((currInput, currInputId) => {
+        if(inputId === currInputId) {
+          inputName = currInput.name;
+        }
+      });
+      textarea.innerHTML += `[${inputName}] ${messageParts.join(' ')}\r`;
+      textarea.scrollTop = textarea.scrollHeight;
+    }
 
     // support value changes (11)
     // TODO button presses (9)
@@ -1464,10 +1482,10 @@ function listenMidiMessages(gui) {
         if(typeof controller.__min === 'undefined' ||
             typeof controller.__max === 'undefined') {
           // no range defined -- throw in the midi value and be done with it
-          controller.setValue(message.velocity * 255);
+          controller.setValue(message.velocity);
         } else {
           // min and max defined -- map midi to range
-          controller.setValue(controller.__min + message.velocity * (controller.__max - controller.__min));
+          controller.setValue(controller.__min + (message.velocity/127) * (controller.__max - controller.__min));
         }
       }
       // TODO handle boolean/function with button presses
@@ -1546,19 +1564,39 @@ function addMidiMenu(gui) {
 
   dom.addClass(div, 'midi-row');
 
-  const automapButton = document.createElement('span');
-  automapButton.innerHTML = 'MIDI Automap';
-  dom.addClass(automapButton, 'button');
-
   const midiMessageIndicator = document.createElement('span');
   midiMessageIndicator.innerHTML = '●';
   dom.addClass(midiMessageIndicator, 'midiMessageIndicator');
 
-  div.appendChild(automapButton);
+  const automapButton = document.createElement('span');
+  automapButton.innerHTML = 'MIDI Automap';
+  dom.addClass(automapButton, 'button');
+
+  const debugButton = document.createElement('span');
+  debugButton.innerHTML = 'Debug';
+  dom.addClass(debugButton, 'button');
+
   div.appendChild(midiMessageIndicator);
+  div.appendChild(automapButton);
+  div.appendChild(debugButton);
 
   dom.bind(automapButton, 'click', function() {
     midiAutoMappingButtonHandler(gui, this);
+  });
+
+  dom.bind(debugButton, 'click', function() {
+    const debugDialog = gui.__midi.debugDialog = gui.__midi.debugDialog || new CenteredDiv();
+    debugDialog.domElement.innerHTML = `
+      <div id="dg-midi-debug" class="dg dialogue">
+        <div>All MIDI messages received:</div>
+        <textarea style="width:100%;height:200px"></textarea>
+      </div>
+    `;
+    debugDialog.onhide = () => {
+      gui.__midi.debug = false;
+    };
+    debugDialog.show();
+    gui.__midi.debug = true;
   });
 }
 
