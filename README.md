@@ -1,67 +1,49 @@
-# dat.GUI
-A lightweight graphical user interface for changing variables in JavaScript. 
+# dat.GUI.midi
 
-Get started with dat.GUI by reading the [tutorial](http://workshop.chromeexperiments.com/examples/gui)
-or the [API documentation](API.md).
+## What is this?
 
+This is an _experimental_ fork of [dat.GUI](https://github.com/dataarts/dat.gui) to add support for MIDI controllers to all existing dat.GUI applications.
 
+## How to use it?
 
-## Packaged Builds
-The easiest way to use dat.GUI in your code is by using the built source at `build/dat.gui.min.js`. These built JavaScript files bundle all the necessary dependencies to run dat.GUI.
+Replace the `dat.gui.*.js` file you're using (`dat.gui.min.js`, `dat.gui.module.js`, etc.) by the one found in this repository under `build/`.
 
-In your `head` tag, include the following code:
-```html
-<script type="text/javascript" src="dat.gui.min.js"></script>
-```
+Then, after initializing the GUI, add the MIDI functionality:
 
-## Installing from npm
+    var gui = new dat.gui.GUI();
+    gui.enableMidi();
 
-```bash
-$ npm install --save dat.gui
-```
+## Examples
 
-```js
-// CommonJS:
-const dat = require('dat.gui');
+Take a look at the [example file](example.html) that ships with dat.GUI, or an [example from Three.js](example_webgl_marchingcubes.html) (seen in the animation above).
 
-// ES6:
-import * as dat from 'dat.gui';
+## Features
 
-const gui = new dat.GUI();
-```
+- Automapping mode allowing to quickly link a MIDI controller to a dat.GUI parameter
+- Support for simultaneous MIDI devices
+- Support for almost all dat.GUI controller types (boolean, color, function, number and option)
+- Support for loading/saving MIDI mappings via the JSON output
+- Support for saving MIDI mappings to localStorage
 
-## Directory Contents
+## Future
 
-```
-├── build - Compiled source code.
-├── src - Source files.
-└── tests - Tests.
-```
+- Better/different support for color controllers (beyond hue control)
+- Refactor code into separate class
+- Consider opening a PR / merging into dat.GUI repo (if there's interest)
+- Automated testing with mock MIDI interfaces/messages..?
 
-## Building your own dat.GUI
+## Tested MIDI devices
 
-In the terminal, enter the following:
+- Novation Launch Control XL
+- Teenage Engineering OP-1
+- (successfully tested with your device? let me know / open a PR! thank you)
 
-```
-$ npm install
-$ npm run build
-```
+## Development instructions
 
-## npm scripts
+Follow the [dat.GUI instructions](https://github.com/dataarts/dat.gui#building-your-own-datgui) i.e., `npm install`, `npm run dev`, etc.
 
-- npm run build - Build development and production version of scripts.
-- npm run dev - Build development version of script and watch for changes.
+## Credits
 
-
-## Working with Content Security Policy
-If you're using a server with a Content Security Policy in place that blocks 'unsafe-inline', you will have problems when dat.gui.js tries to inject style information. To get around this, load 'build/dat.gui.css' as an external style sheet.
-
-## Changes
-View the [Change Log](CHANGELOG.md)
-
-## Thanks
-The following libraries / open-source projects were used in the development of dat.GUI:
- * [Rollup](https://rollupjs.org)
- * [Sass](http://sass-lang.com/)
- * [Node.js](http://nodejs.org/)
- * [QUnit](https://github.com/jquery/qunit) / [jquery](http://jquery.com/)
+- all dat.GUI contributors
+- all Three.js contributors
+- Henrik Rydgård for the Marching Cubes example
