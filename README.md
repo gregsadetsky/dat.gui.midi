@@ -15,10 +15,6 @@ Then, after initializing the GUI, add the MIDI functionality:
     var gui = new dat.gui.GUI();
     gui.enableMidi();
 
-## Examples
-
-Take a look at the [example file](example.html) that ships with dat.GUI, or an [example from Three.js](example_webgl_marchingcubes.html) (seen in the animation above).
-
 ## Features
 
 - Automapping mode allowing to quickly link a MIDI controller to a dat.GUI parameter
