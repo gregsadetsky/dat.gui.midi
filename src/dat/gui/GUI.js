@@ -89,6 +89,8 @@ const hideableGuis = [];
  * @param {Boolean} [params.closeOnTop=false] If true, close/open button shows on top of the GUI
  */
 const GUI = function(pars) {
+  console.log('pars', pars);
+
   const _this = this;
 
   let params = pars || {};
@@ -782,17 +784,17 @@ common.extend(
         throw new Error('MIDI access not supported by this browser');
       }
 
-      // TODO load settings from localStorage
-
       navigator.requestMIDIAccess().then((access) => {
         this.__midi = {
+          loadedInitialValues: false,
           access,
           autoMapping: false,
           // in automapping mode, which controller is being hovered over?
           autoMappingCurrentController: null,
           // collect some (5?) messages in automapping mode and check that
           // they're all from the same note before setting the mapping
-          // to denoise spurious messages
+          // to denoise spurious messages -- this only applies to
+          // command == 11 messages (typically, for knobs).
           autoMappingMessageQueue: [],
           debug: false,
           debugDialog: null,
@@ -801,8 +803,8 @@ common.extend(
             mapping: {
               // key: input.id
               // value: map
-              //  key: midi note
-              //  value: controller object
+              //   key: midi note
+              //   value: controller object
             }
           }
         };
@@ -834,6 +836,7 @@ common.extend(
      */
     getSaveObject: function() {
       const toReturn = this.load;
+
       toReturn.closed = this.closed;
 
       // Am I remembering any values?
@@ -845,6 +848,9 @@ common.extend(
         }
 
         toReturn.remembered[this.preset] = getCurrentPreset(this);
+
+        // assuming that this code will only run on root gui, at least once
+        toReturn.midiMapping = getCurrentMidiMapping(this);
       }
 
       toReturn.folders = {};
@@ -1345,6 +1351,37 @@ function addSaveMenu(gui) {
   // div.appendChild(button2);
 }
 
+// used for localStorage
+function getCurrentMidiMapping(gui) {
+  function getInputNameFromInputId(inputId) {
+    let foundName = null;
+    gui.__midi.access.inputs.forEach(input => {
+      if(input.id === inputId) {
+        foundName = input.name;
+      }
+    });
+    return foundName;
+  }
+
+  const allMappedInputNoteParameters = {};
+  Object.keys(gui.__midi.settings.mapping).forEach(inputId => {
+    const inputName = getInputNameFromInputId(inputId);
+    // can't store mapping for input if we can't get its name
+    if(inputName === null) {
+      return;
+    }
+    allMappedInputNoteParameters[inputName] = {};
+
+    Object.keys(gui.__midi.settings.mapping[inputId]).forEach(mappedNote => {
+      const mappedController = gui.__midi.settings.mapping[inputId][mappedNote];
+
+      allMappedInputNoteParameters[inputName][mappedNote] = mappedController.property;
+    });
+  });
+
+  return allMappedInputNoteParameters;
+}
+
 function listenMidiMessages(gui) {
   // https://stackoverflow.com/a/40902865/426790
   function parseMidiMessage(message) {
@@ -1367,6 +1404,7 @@ function listenMidiMessages(gui) {
     message = parseMidiMessage(message);
     console.log('message', message);
 
+    // debug window is open -- format message and add it to the textarea
     if(gui.__midi.debug) {
       const textarea = document.querySelector('#dg-midi-debug textarea')
       const messageParts = Object.keys(message).sort().map(key => {
@@ -1379,15 +1417,18 @@ function listenMidiMessages(gui) {
           inputName = currInput.name;
         }
       });
+
       textarea.innerHTML += `[${inputName}] ${messageParts.join(' ')}\r`;
       textarea.scrollTop = textarea.scrollHeight;
     }
 
-    // support value changes (11)
-    if(!(message.command === 11 ||
-        message.command === 9)) {
+    // support expression (11) and note on (9) messages only
+    if(!(message.command === 11 || message.command === 9)) {
       return;
     }
+
+    // at this point, we consider the message to be valid -- flash small indicator
+    indicateMessageReceived();
 
     if(gui.__midi.autoMapping) {
       // mapping message
@@ -1399,39 +1440,46 @@ function listenMidiMessages(gui) {
         return;
       }
 
+      // expression messages can only be mapped to Number, Color and Option controllers
+      // note on messages can only be mapped to Boolean and Function controllers
       if(!(
         (gui.__midi.autoMappingCurrentController instanceof NumberController && message.command === 11) ||
-        (gui.__midi.autoMappingCurrentController instanceof BooleanController && message.command === 9) ||
-        (gui.__midi.autoMappingCurrentController instanceof FunctionController && message.command === 9) ||
         (gui.__midi.autoMappingCurrentController instanceof ColorController && message.command === 11) ||
-        (gui.__midi.autoMappingCurrentController instanceof OptionController && message.command === 11)
+        (gui.__midi.autoMappingCurrentController instanceof OptionController && message.command === 11) ||
+        (gui.__midi.autoMappingCurrentController instanceof BooleanController && message.command === 9) ||
+        (gui.__midi.autoMappingCurrentController instanceof FunctionController && message.command === 9)
         )) {
         return;
       }
 
-      // at this point, consider the message valid -- indicate it
-      indicateMessageReceived();
+      // use message queue only in the case of command == 11 messages,
+      // i.e., turning knobs.
+      // when mapping a button, map it immediately
+      // (as soon as 1 message is received) as pressing a button 5 times
+      // is annoying
+      if(message.command === 11) {      
+        // fill queue with up to 5 last messages.
+        if(gui.__midi.autoMappingMessageQueue.length === 5) {
+          gui.__midi.autoMappingMessageQueue.shift();
+        }
+        // add latest message
+        gui.__midi.autoMappingMessageQueue.push(message);
 
-      // fill queue with up to 5 last messages.
-      if(gui.__midi.autoMappingMessageQueue.length === 5) {
-        gui.__midi.autoMappingMessageQueue.shift();
-      }
-      gui.__midi.autoMappingMessageQueue.push(message);
+        // queue not filled yet
+        if(gui.__midi.autoMappingMessageQueue.length < 5) {
+          return;
+        }
 
-      // queue not filled yet
-      if(gui.__midi.autoMappingMessageQueue.length < 5) {
-        return;
-      }
+        // are all messages in the queue from the same note?
+        const foundNotes = {};
+        gui.__midi.autoMappingMessageQueue.forEach(currMessage => {
+          foundNotes[currMessage.note] = true;
+        });
 
-      // are all messages in the queue from the same note?
-      const foundNotes = {};
-      gui.__midi.autoMappingMessageQueue.forEach(currMessage => {
-        foundNotes[currMessage.note] = true;
-      });
-
-      // more than a single note found, wait for things to stabilize before mapping
-      if(Object.keys(foundNotes).length !== 1) {
-        return;
+        // more than a single note found, wait for things to stabilize before mapping
+        if(Object.keys(foundNotes).length !== 1) {
+          return;
+        }
       }
 
       // ready to map!
@@ -1439,8 +1487,12 @@ function listenMidiMessages(gui) {
         gui.__midi.settings.mapping[inputId] = {};
       }
 
+      // save reference to previously set controller (see below)
       const previouslySetController = gui.__midi.settings.mapping[inputId][message.note];
+      // set it!
       gui.__midi.settings.mapping[inputId][message.note] = gui.__midi.autoMappingCurrentController;
+      // mark current preset as needing to be saved
+      markPresetModified(gui, true);
 
       const controllerEl = gui.__midi.autoMappingCurrentController.__li;
       dom.removeClass(controllerEl, 'midiMappingNotSet');
@@ -1453,17 +1505,14 @@ function listenMidiMessages(gui) {
 
       // if previously set controller exists, and is not the one that we just set,
       // change class to show that it's not automapped anymore
-      if(typeof previouslySetController !== 'undefined' && previouslySetController !== null &&
-        previouslySetController !== gui.__midi.autoMappingCurrentController) {
+      if(typeof previouslySetController !== 'undefined' &&
+          previouslySetController !== null &&
+          previouslySetController !== gui.__midi.autoMappingCurrentController) {
         dom.removeClass(previouslySetController.__li, 'midiMappingSet');
         dom.addClass(previouslySetController.__li, 'midiMappingNotSet');
       }
     } else {
       // regular (not automapping) message
-
-      // all messages are good to indicate
-      // (filtering on message.command was done above)
-      indicateMessageReceived();
 
       // does mapping exist for this controller?
       if(typeof gui.__midi.settings.mapping[inputId] === 'undefined') {
@@ -1484,36 +1533,115 @@ function listenMidiMessages(gui) {
       if(controller instanceof NumberController) {
         if(typeof controller.__min === 'undefined' ||
             typeof controller.__max === 'undefined') {
-          // no range defined -- throw in the midi value and be done with it
+          // no range defined -- set the raw midi value and be done with it
           controller.setValue(message.velocity);
         } else {
           // min and max defined -- map midi to range
           controller.setValue(controller.__min + (message.velocity/127) * (controller.__max - controller.__min));
         }
+      } else if(controller instanceof ColorController) {
+        // expression message controls the hue only
+        controller.__color.h = (message.velocity/127) * 360;
+        controller.setValue(controller.__color.toOriginal());
+      } else if(controller instanceof OptionController) {
+        // (velocity - 1) so that it never gets to 127, becoming options.length
+        const optionIndex = parseInt((message.velocity-1)/127 * controller.__select.options.length);
+        controller.setValue(controller.__select.options[optionIndex].value);
       } else if(controller instanceof BooleanController) {
         controller.setValue(!controller.getValue());
       } else if(controller instanceof FunctionController) {
         controller.fire();
-      } else if(controller instanceof ColorController) {
-        controller.__color.h = (message.velocity/127) * 360;
-        controller.setValue(controller.__color.toOriginal());
-      } else if(controller instanceof OptionController) {
-        // velocity - 1 so that it never gets to 127, becoming options.length
-        const optionIndex = parseInt((message.velocity-1)/127 * controller.__select.options.length);
-        controller.setValue(controller.__select.options[optionIndex].value);
       }
     }
   }
 
-  // listen to all inputs
+  // listen to all MIDI devices
   gui.__midi.access.inputs.forEach((input, inputId) => {
     input.onmidimessage = message => {
-      messageHandler(message, inputId)
+      messageHandler(message, inputId);
     };
   });
 }
 
+// recurse into gui, passing all found controllers to callback
+function allControllersWalker(currGui, callback) {
+  // iterate over gui's controllers
+  currGui.__controllers.forEach(controller => callback(controller));
+
+  // and recurse into all of its __folders
+  Object.values(currGui.__folders).forEach(folder => {
+    allControllersWalker(folder, callback);
+  });
+}
+
+function midiSetMappingFromLoadedValues(gui) {
+  console.log('midiSetMappingFromLoadedValues');
+  function findInputIdFromInputName(inputName) {
+    let foundInputId = null;
+    gui.__midi.access.inputs.forEach(input => {
+      if(input.name === inputName) {
+        foundInputId = input.id;
+      }
+    });
+    return foundInputId;
+  }
+
+  const propertyToControllerMap = {};
+  allControllersWalker(gui, controller => {
+    propertyToControllerMap[controller.property] = controller;
+  });
+
+  console.log('propertyToControllerMap', propertyToControllerMap);
+
+  console.log('gui.load', gui.load);
+  console.log('gui.load.midiMapping', gui.load.midiMapping);
+
+  if(typeof gui.load !== 'undefined' &&
+    typeof gui.load.midiMapping !== 'undefined') {
+    Object.keys(gui.load.midiMapping).forEach(inputName => {
+      const foundInputId = findInputIdFromInputName(inputName);
+      console.log('foundInputId', foundInputId);
+      // could not find referenced input in loaded data, bail
+      if(foundInputId === null) {
+        return;
+      }
+
+      Object.keys(gui.load.midiMapping[inputName]).forEach(mappedNote => {
+        const mappedNoteInt = parseInt(mappedNote);
+        const mappedProperty = gui.load.midiMapping[inputName][mappedNote];
+
+        console.log('mappedNoteInt', mappedNoteInt);
+        console.log('mappedProperty', mappedProperty);
+
+        if(typeof propertyToControllerMap[mappedProperty] === 'undefined') {
+          // could not find controller referenced by loaded mapping, bail
+          return;
+        }
+        const foundController = propertyToControllerMap[mappedProperty];
+
+        console.log('foundController', foundController);
+
+        // finally..!
+        if(typeof gui.__midi.settings.mapping[foundInputId] === 'undefined') {
+          gui.__midi.settings.mapping[foundInputId] = {};
+        }
+        gui.__midi.settings.mapping[foundInputId][mappedNoteInt] = foundController;
+      });
+    });
+  }
+}
+
 function midiAutoMappingButtonHandler(gui, button) {
+  console.log('midiAutoMappingButtonHandler');
+
+  console.log('gui.__midi.loadedInitialValues', gui.__midi.loadedInitialValues);
+  if(gui.__midi.loadedInitialValues === false) {
+    // consider that we loaded initial values, even if we don't find any
+    // values to load (so that this code will only run once)
+    gui.__midi.loadedInitialValues = true;
+    midiSetMappingFromLoadedValues(gui);
+  }
+
   // midi mapping in action?
   const autoMapping = gui.__midi.autoMapping = !(gui.__midi.autoMapping);
 
@@ -1524,17 +1652,34 @@ function midiAutoMappingButtonHandler(gui, button) {
     dom.removeClass(button, 'midiAutoMapping');
   }
 
-  function controllerWalker(currGui, callback) {
-    // walk through all controllers
-    currGui.__controllers.forEach(controller => callback(controller));
-
-    // and recurse into all __folders
-    Object.values(currGui.__folders).forEach(folder => {
-      controllerWalker(folder, callback)
+  const allMappedControllers = {};
+  Object.keys(gui.__midi.settings.mapping).forEach(inputId => {
+    Object.keys(gui.__midi.settings.mapping[inputId]).forEach(mappedNote => {
+      const mappedController = gui.__midi.settings.mapping[inputId][mappedNote];
+      allMappedControllers[mappedController.property] = mappedController;
     });
-  }
+  });
 
-  controllerWalker(gui, controller => {
+  allControllersWalker(gui, controller => {
+    // set class for controllers when starting automapping
+    if(autoMapping) {
+      // only set classes for supported types of controllers
+      if(controller instanceof NumberController ||
+        controller instanceof ColorController ||
+        controller instanceof OptionController ||
+        controller instanceof BooleanController ||
+        controller instanceof FunctionController) {
+        // set class depending no current mapping status
+        let propertyMappingSetClass = '';
+        if(typeof allMappedControllers[controller.property] !== 'undefined') {
+          propertyMappingSetClass = 'midiMappingSet';
+        } else {
+          propertyMappingSetClass = 'midiMappingNotSet';
+        }
+        dom.addClass(controller.__li, propertyMappingSetClass);
+      }
+    }
+
     // use functions to bind/unbind on mouseover/out
     function mouseOverHandler() {
       gui.__midi.autoMappingCurrentController = controller;
@@ -1621,9 +1766,9 @@ function addMidiMenu(gui) {
     const helpDialog = gui.__midi.helpDialog = gui.__midi.helpDialog || new CenteredDiv();
     helpDialog.domElement.innerHTML = `
       <div id="dg-midi-help" class="dg dialogue">
-        <div>Click 'MIDI Automap' and turn a knob or press a button on your MIDI controller <b>5 times</b>. Once the automapper detects this, and is able to map your controller, the parameter will turn to green. Click 'MIDI Automap' again to leave the automapping mode.</div>
-        <div>Velocity messages (typically, from knobs and sliders) can be mapped to numeric parameters. Note on/off messages (typically, from buttons) can be mapped to boolean and function parameters.</div>
-        <div>Troubleshooting: Make sure that the browser sees your MIDI devices and is receiving its messages by clicking the 'Debug' button.</div>
+        <div>Click 'MIDI Automap', then bring your mouse over the property to be mapped, and turn a knob or press a button on your MIDI device. Once the automapper detects this, and is able to map the MIDI control to the property*, the property will turn to green. A red property means that it is not mapped to any control. Click 'MIDI Automap' again to leave the automapping mode.</div>
+        <div>*Expression MIDI messages (typically, from knobs and sliders) can be mapped to numeric, option and color parameters (in the latter case, the controller will vary the hue). Note on/off messages (typically, from buttons) can be mapped to boolean and function parameters.</div>
+        <div>Troubleshooting: Make sure that your operating system and browser see your MIDI devices. You can check that dat.gui.midi is receiving MIDI messages by clicking 'Debug' and using your MIDI device controllers.</div>
         <div>Project homepage: <a target="_blank" href="https://github.com/gregsadetsky/dat.gui.midi">https://github.com/gregsadetsky/dat.gui.midi</a></div>
       </div>
     `;

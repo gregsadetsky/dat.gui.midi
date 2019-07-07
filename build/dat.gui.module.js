@@ -1687,6 +1687,7 @@ var autoPlaceContainer = void 0;
 var hide = false;
 var hideableGuis = [];
 var GUI = function GUI(pars) {
+  console.log('pars', pars);
   var _this = this;
   var params = pars || {};
   this.domElement = document.createElement('div');
@@ -2078,6 +2079,7 @@ Common.extend(GUI.prototype,
     }
     navigator.requestMIDIAccess().then(function (access) {
       _this2.__midi = {
+        loadedInitialValues: false,
         access: access,
         autoMapping: false,
         autoMappingCurrentController: null,
@@ -2112,6 +2114,7 @@ Common.extend(GUI.prototype,
         toReturn.remembered = {};
       }
       toReturn.remembered[this.preset] = getCurrentPreset(this);
+      toReturn.midiMapping = getCurrentMidiMapping(this);
     }
     toReturn.folders = {};
     Common.each(this.__folders, function (element, key) {
@@ -2450,6 +2453,30 @@ function addSaveMenu(gui) {
     gui.revert();
   });
 }
+function getCurrentMidiMapping(gui) {
+  function getInputNameFromInputId(inputId) {
+    var foundName = null;
+    gui.__midi.access.inputs.forEach(function (input) {
+      if (input.id === inputId) {
+        foundName = input.name;
+      }
+    });
+    return foundName;
+  }
+  var allMappedInputNoteParameters = {};
+  Object.keys(gui.__midi.settings.mapping).forEach(function (inputId) {
+    var inputName = getInputNameFromInputId(inputId);
+    if (inputName === null) {
+      return;
+    }
+    allMappedInputNoteParameters[inputName] = {};
+    Object.keys(gui.__midi.settings.mapping[inputId]).forEach(function (mappedNote) {
+      var mappedController = gui.__midi.settings.mapping[inputId][mappedNote];
+      allMappedInputNoteParameters[inputName][mappedNote] = mappedController.property;
+    });
+  });
+  return allMappedInputNoteParameters;
+}
 function listenMidiMessages(gui) {
   function parseMidiMessage(message) {
     return {
@@ -2485,34 +2512,37 @@ function listenMidiMessages(gui) {
     if (!(message.command === 11 || message.command === 9)) {
       return;
     }
+    indicateMessageReceived();
     if (gui.__midi.autoMapping) {
       if (gui.__midi.autoMappingCurrentController === null) {
         gui.__midi.autoMappingMessageQueue = [];
         return;
       }
-      if (!(gui.__midi.autoMappingCurrentController instanceof NumberController && message.command === 11 || gui.__midi.autoMappingCurrentController instanceof BooleanController && message.command === 9 || gui.__midi.autoMappingCurrentController instanceof FunctionController && message.command === 9 || gui.__midi.autoMappingCurrentController instanceof ColorController && message.command === 11 || gui.__midi.autoMappingCurrentController instanceof OptionController && message.command === 11)) {
+      if (!(gui.__midi.autoMappingCurrentController instanceof NumberController && message.command === 11 || gui.__midi.autoMappingCurrentController instanceof ColorController && message.command === 11 || gui.__midi.autoMappingCurrentController instanceof OptionController && message.command === 11 || gui.__midi.autoMappingCurrentController instanceof BooleanController && message.command === 9 || gui.__midi.autoMappingCurrentController instanceof FunctionController && message.command === 9)) {
         return;
       }
-      indicateMessageReceived();
-      if (gui.__midi.autoMappingMessageQueue.length === 5) {
-        gui.__midi.autoMappingMessageQueue.shift();
-      }
-      gui.__midi.autoMappingMessageQueue.push(message);
-      if (gui.__midi.autoMappingMessageQueue.length < 5) {
-        return;
-      }
-      var foundNotes = {};
-      gui.__midi.autoMappingMessageQueue.forEach(function (currMessage) {
-        foundNotes[currMessage.note] = true;
-      });
-      if (Object.keys(foundNotes).length !== 1) {
-        return;
+      if (message.command === 11) {
+        if (gui.__midi.autoMappingMessageQueue.length === 5) {
+          gui.__midi.autoMappingMessageQueue.shift();
+        }
+        gui.__midi.autoMappingMessageQueue.push(message);
+        if (gui.__midi.autoMappingMessageQueue.length < 5) {
+          return;
+        }
+        var foundNotes = {};
+        gui.__midi.autoMappingMessageQueue.forEach(function (currMessage) {
+          foundNotes[currMessage.note] = true;
+        });
+        if (Object.keys(foundNotes).length !== 1) {
+          return;
+        }
       }
       if (typeof gui.__midi.settings.mapping[inputId] === 'undefined') {
         gui.__midi.settings.mapping[inputId] = {};
       }
       var previouslySetController = gui.__midi.settings.mapping[inputId][message.note];
       gui.__midi.settings.mapping[inputId][message.note] = gui.__midi.autoMappingCurrentController;
+      markPresetModified(gui, true);
       var controllerEl = gui.__midi.autoMappingCurrentController.__li;
       dom.removeClass(controllerEl, 'midiMappingNotSet');
       dom.addClass(controllerEl, 'midiMappingSet');
@@ -2525,7 +2555,6 @@ function listenMidiMessages(gui) {
         dom.addClass(previouslySetController.__li, 'midiMappingNotSet');
       }
     } else {
-      indicateMessageReceived();
       if (typeof gui.__midi.settings.mapping[inputId] === 'undefined') {
         return;
       }
@@ -2542,16 +2571,16 @@ function listenMidiMessages(gui) {
         } else {
           controller.setValue(controller.__min + message.velocity / 127 * (controller.__max - controller.__min));
         }
-      } else if (controller instanceof BooleanController) {
-        controller.setValue(!controller.getValue());
-      } else if (controller instanceof FunctionController) {
-        controller.fire();
       } else if (controller instanceof ColorController) {
         controller.__color.h = message.velocity / 127 * 360;
         controller.setValue(controller.__color.toOriginal());
       } else if (controller instanceof OptionController) {
         var optionIndex = parseInt((message.velocity - 1) / 127 * controller.__select.options.length);
         controller.setValue(controller.__select.options[optionIndex].value);
+      } else if (controller instanceof BooleanController) {
+        controller.setValue(!controller.getValue());
+      } else if (controller instanceof FunctionController) {
+        controller.fire();
       }
     }
   }
@@ -2561,22 +2590,89 @@ function listenMidiMessages(gui) {
     };
   });
 }
+function allControllersWalker(currGui, callback) {
+  currGui.__controllers.forEach(function (controller) {
+    return callback(controller);
+  });
+  Object.values(currGui.__folders).forEach(function (folder) {
+    allControllersWalker(folder, callback);
+  });
+}
+function midiSetMappingFromLoadedValues(gui) {
+  console.log('midiSetMappingFromLoadedValues');
+  function findInputIdFromInputName(inputName) {
+    var foundInputId = null;
+    gui.__midi.access.inputs.forEach(function (input) {
+      if (input.name === inputName) {
+        foundInputId = input.id;
+      }
+    });
+    return foundInputId;
+  }
+  var propertyToControllerMap = {};
+  allControllersWalker(gui, function (controller) {
+    propertyToControllerMap[controller.property] = controller;
+  });
+  console.log('propertyToControllerMap', propertyToControllerMap);
+  console.log('gui.load', gui.load);
+  console.log('gui.load.midiMapping', gui.load.midiMapping);
+  if (typeof gui.load !== 'undefined' && typeof gui.load.midiMapping !== 'undefined') {
+    Object.keys(gui.load.midiMapping).forEach(function (inputName) {
+      var foundInputId = findInputIdFromInputName(inputName);
+      console.log('foundInputId', foundInputId);
+      if (foundInputId === null) {
+        return;
+      }
+      Object.keys(gui.load.midiMapping[inputName]).forEach(function (mappedNote) {
+        var mappedNoteInt = parseInt(mappedNote);
+        var mappedProperty = gui.load.midiMapping[inputName][mappedNote];
+        console.log('mappedNoteInt', mappedNoteInt);
+        console.log('mappedProperty', mappedProperty);
+        if (typeof propertyToControllerMap[mappedProperty] === 'undefined') {
+          return;
+        }
+        var foundController = propertyToControllerMap[mappedProperty];
+        console.log('foundController', foundController);
+        if (typeof gui.__midi.settings.mapping[foundInputId] === 'undefined') {
+          gui.__midi.settings.mapping[foundInputId] = {};
+        }
+        gui.__midi.settings.mapping[foundInputId][mappedNoteInt] = foundController;
+      });
+    });
+  }
+}
 function midiAutoMappingButtonHandler(gui, button) {
+  console.log('midiAutoMappingButtonHandler');
+  console.log('gui.__midi.loadedInitialValues', gui.__midi.loadedInitialValues);
+  if (gui.__midi.loadedInitialValues === false) {
+    gui.__midi.loadedInitialValues = true;
+    midiSetMappingFromLoadedValues(gui);
+  }
   var autoMapping = gui.__midi.autoMapping = !gui.__midi.autoMapping;
   if (autoMapping) {
     dom.addClass(button, 'midiAutoMapping');
   } else {
     dom.removeClass(button, 'midiAutoMapping');
   }
-  function controllerWalker(currGui, callback) {
-    currGui.__controllers.forEach(function (controller) {
-      return callback(controller);
+  var allMappedControllers = {};
+  Object.keys(gui.__midi.settings.mapping).forEach(function (inputId) {
+    Object.keys(gui.__midi.settings.mapping[inputId]).forEach(function (mappedNote) {
+      var mappedController = gui.__midi.settings.mapping[inputId][mappedNote];
+      allMappedControllers[mappedController.property] = mappedController;
     });
-    Object.values(currGui.__folders).forEach(function (folder) {
-      controllerWalker(folder, callback);
-    });
-  }
-  controllerWalker(gui, function (controller) {
+  });
+  allControllersWalker(gui, function (controller) {
+    if (autoMapping) {
+      if (controller instanceof NumberController || controller instanceof ColorController || controller instanceof OptionController || controller instanceof BooleanController || controller instanceof FunctionController) {
+        var propertyMappingSetClass = '';
+        if (typeof allMappedControllers[controller.property] !== 'undefined') {
+          propertyMappingSetClass = 'midiMappingSet';
+        } else {
+          propertyMappingSetClass = 'midiMappingNotSet';
+        }
+        dom.addClass(controller.__li, propertyMappingSetClass);
+      }
+    }
     function mouseOverHandler() {
       gui.__midi.autoMappingCurrentController = controller;
     }
@@ -2636,7 +2732,7 @@ function addMidiMenu(gui) {
   });
   dom.bind(helpButton, 'click', function () {
     var helpDialog = gui.__midi.helpDialog = gui.__midi.helpDialog || new CenteredDiv();
-    helpDialog.domElement.innerHTML = '\n      <div id="dg-midi-help" class="dg dialogue">\n        <div>Click \'MIDI Automap\' and turn a knob or press a button on your MIDI controller <b>5 times</b>. Once the automapper detects this, and is able to map your controller, the parameter will turn to green. Click \'MIDI Automap\' again to leave the automapping mode.</div>\n        <div>Velocity messages (typically, from knobs and sliders) can be mapped to numeric parameters. Note on/off messages (typically, from buttons) can be mapped to boolean and function parameters.</div>\n        <div>Troubleshooting: Make sure that the browser sees your MIDI devices and is receiving its messages by clicking the \'Debug\' button.</div>\n        <div>Project homepage: <a target="_blank" href="https://github.com/gregsadetsky/dat.gui.midi">https://github.com/gregsadetsky/dat.gui.midi</a></div>\n      </div>\n    ';
+    helpDialog.domElement.innerHTML = '\n      <div id="dg-midi-help" class="dg dialogue">\n        <div>Click \'MIDI Automap\', then bring your mouse over the property to be mapped, and turn a knob or press a button on your MIDI device. Once the automapper detects this, and is able to map the MIDI control to the property*, the property will turn to green. A red property means that it is not mapped to any control. Click \'MIDI Automap\' again to leave the automapping mode.</div>\n        <div>*Expression MIDI messages (typically, from knobs and sliders) can be mapped to numeric, option and color parameters (in the latter case, the controller will vary the hue). Note on/off messages (typically, from buttons) can be mapped to boolean and function parameters.</div>\n        <div>Troubleshooting: Make sure that your operating system and browser see your MIDI devices. You can check that dat.gui.midi is receiving MIDI messages by clicking \'Debug\' and using your MIDI device controllers.</div>\n        <div>Project homepage: <a target="_blank" href="https://github.com/gregsadetsky/dat.gui.midi">https://github.com/gregsadetsky/dat.gui.midi</a></div>\n      </div>\n    ';
     helpDialog.show();
   });
 }

@@ -1,68 +1,149 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 </head>
+
 <body>
   <script type="text/javascript" src="build/dat.gui.js"></script>
   <script type="text/javascript">
-    var obj = {
-        message: 'Hello World',
-        displayOutline: false,
-
-        maxSize: 6.0,
-        speed: 5,
-
-        height: 10,
-        noiseStrength: 10.2,
-        growthSpeed: 0.2,
-
-        type: 'three',
-
-        explode: function () {
-          alert('Bang!');
+  var load = {
+  "preset": "Default",
+  "closed": false,
+  "remembered": {
+    "Default": {
+      "0": {
+        "message": "Hello World",
+        "displayOutline": false,
+        "maxSize": 0.75,
+        "height": 70,
+        "type": "two",
+        "speed": "5",
+        "color0": "#20a5ff",
+        "color1": [
+          244.96062992125985,
+          255,
+          0
+        ],
+        "color2": [
+          0,
+          255,
+          164.64566929133863,
+          0.3
+        ],
+        "color3": {
+          "h": 201.25984251968504,
+          "s": 0.9210526315789473,
+          "v": 0.2980392156862745
         },
+        "color4": {
+          "h": 350,
+          "s": 0.9,
+          "v": 0.3
+        },
+        "noiseStrength": 10.2,
+        "growthSpeed": 0.2
+      }
+    }
+  },
+  "midiMapping": {
+    "Launch Control XL": {
+      "77": "maxSize",
+      "78": "height",
+      "79": "type",
+      "80": "speed",
+      "81": "color0",
+      "82": "color1",
+      "83": "color2",
+      "84": "color3"
+    }
+  },
+  "folders": {
+    "Colors": {
+      "preset": "Default",
+      "closed": false,
+      "folders": {
+        "subf": {
+          "preset": "Default",
+          "closed": true,
+          "folders": {}
+        }
+      }
+    },
+    "Another Folder": {
+      "preset": "Default",
+      "closed": true,
+      "folders": {
+        "Nested Folder": {
+          "preset": "Default",
+          "closed": true,
+          "folders": {}
+        }
+      }
+    }
+  }
+};
 
-        color0: "#ffae23", // CSS string
-        color1: [ 0, 128, 255 ], // RGB array
-        color2: [ 0, 128, 255, 0.3 ], // RGB with alpha
-        color3: { h: 350, s: 0.9, v: 0.3 }, // Hue, saturation, value
-        color4: { h: 350, s: 0.9, v: 0.3 } // Hue, saturation, value
-    };
+  var obj = {
+    message: 'Hello World',
+    displayOutline: false,
 
-    var gui = new dat.gui.GUI();
+    maxSize: 6.0,
+    speed: 5,
 
-    gui.enableMidi();
-    gui.remember(obj);
+    height: 10,
+    noiseStrength: 10.2,
+    growthSpeed: 0.2,
 
-    gui.add(obj, 'message');
-    gui.add(obj, 'displayOutline');
-    gui.add(obj, 'explode');
+    type: 'three',
 
-    gui.add(obj, 'maxSize').min(-10).max(10).step(0.25);
-    gui.add(obj, 'height').step(5); // Increment amount
+    explode: function() {
+      alert('Bang!');
+    },
 
-    // Choose from accepted values
-    gui.add(obj, 'type', [ 'one', 'two', 'three' ] );
+    color0: "#ffae23", // CSS string
+    color1: [0, 128, 255], // RGB array
+    color2: [0, 128, 255, 0.3], // RGB with alpha
+    color3: { h: 350, s: 0.9, v: 0.3 }, // Hue, saturation, value
+    color4: { h: 350, s: 0.9, v: 0.3 } // Hue, saturation, value
+  };
 
-    // Choose from named values
-    gui.add(obj, 'speed', { Stopped: 0, Slow: 0.1, Fast: 5 } );
+  var gui = new dat.gui.GUI({
 
-    var f1 = gui.addFolder('Colors');
-    f1.addColor(obj, 'color0');
-    f1.addColor(obj, 'color1');
-    f1.addColor(obj, 'color2');
-    f1.addColor(obj, 'color3');
+  });
 
-    var subf = f1.addFolder('subf');
-    subf.addColor(obj, 'color4')
+  gui.enableMidi();
+  gui.remember(obj);
 
-    var f2 = gui.addFolder('Another Folder');
-    f2.add(obj, 'noiseStrength');
+  gui.add(obj, 'message');
+  gui.add(obj, 'displayOutline');
+  gui.add(obj, 'explode');
 
-    var f3 = f2.addFolder('Nested Folder');
-    f3.add(obj, 'growthSpeed');
+  gui.add(obj, 'maxSize').min(-10).max(10).step(0.25);
+  gui.add(obj, 'height').step(5); // Increment amount
 
+  // Choose from accepted values
+  gui.add(obj, 'type', ['one', 'two', 'three']);
+
+  // Choose from named values
+  gui.add(obj, 'speed', { Stopped: 0, Slow: 0.1, Fast: 5 });
+
+  var f1 = gui.addFolder('Colors');
+  f1.addColor(obj, 'color0');
+  f1.addColor(obj, 'color1');
+  f1.addColor(obj, 'color2');
+  f1.addColor(obj, 'color3');
+
+  var subf = f1.addFolder('subf');
+  subf.addColor(obj, 'color4')
+
+  var f2 = gui.addFolder('Another Folder');
+  f2.add(obj, 'noiseStrength');
+
+  var f3 = f2.addFolder('Nested Folder');
+  f3.add(obj, 'growthSpeed');
   </script>
 </body>
+
 </html>
