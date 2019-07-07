@@ -89,8 +89,6 @@ const hideableGuis = [];
  * @param {Boolean} [params.closeOnTop=false] If true, close/open button shows on top of the GUI
  */
 const GUI = function(pars) {
-  console.log('pars', pars);
-
   const _this = this;
 
   let params = pars || {};
@@ -1402,7 +1400,6 @@ function listenMidiMessages(gui) {
     }
 
     message = parseMidiMessage(message);
-    console.log('message', message);
 
     // debug window is open -- format message and add it to the textarea
     if(gui.__midi.debug) {
@@ -1491,8 +1488,10 @@ function listenMidiMessages(gui) {
       const previouslySetController = gui.__midi.settings.mapping[inputId][message.note];
       // set it!
       gui.__midi.settings.mapping[inputId][message.note] = gui.__midi.autoMappingCurrentController;
-      // mark current preset as needing to be saved
-      markPresetModified(gui, true);
+      if(gui.__preset_select) {
+        // mark current preset as needing to be saved
+        markPresetModified(gui, true);
+      }
 
       const controllerEl = gui.__midi.autoMappingCurrentController.__li;
       dom.removeClass(controllerEl, 'midiMappingNotSet');
@@ -1575,7 +1574,6 @@ function allControllersWalker(currGui, callback) {
 }
 
 function midiSetMappingFromLoadedValues(gui) {
-  console.log('midiSetMappingFromLoadedValues');
   function findInputIdFromInputName(inputName) {
     let foundInputId = null;
     gui.__midi.access.inputs.forEach(input => {
@@ -1591,16 +1589,10 @@ function midiSetMappingFromLoadedValues(gui) {
     propertyToControllerMap[controller.property] = controller;
   });
 
-  console.log('propertyToControllerMap', propertyToControllerMap);
-
-  console.log('gui.load', gui.load);
-  console.log('gui.load.midiMapping', gui.load.midiMapping);
-
   if(typeof gui.load !== 'undefined' &&
     typeof gui.load.midiMapping !== 'undefined') {
     Object.keys(gui.load.midiMapping).forEach(inputName => {
       const foundInputId = findInputIdFromInputName(inputName);
-      console.log('foundInputId', foundInputId);
       // could not find referenced input in loaded data, bail
       if(foundInputId === null) {
         return;
@@ -1610,16 +1602,11 @@ function midiSetMappingFromLoadedValues(gui) {
         const mappedNoteInt = parseInt(mappedNote);
         const mappedProperty = gui.load.midiMapping[inputName][mappedNote];
 
-        console.log('mappedNoteInt', mappedNoteInt);
-        console.log('mappedProperty', mappedProperty);
-
         if(typeof propertyToControllerMap[mappedProperty] === 'undefined') {
           // could not find controller referenced by loaded mapping, bail
           return;
         }
         const foundController = propertyToControllerMap[mappedProperty];
-
-        console.log('foundController', foundController);
 
         // finally..!
         if(typeof gui.__midi.settings.mapping[foundInputId] === 'undefined') {
@@ -1632,9 +1619,6 @@ function midiSetMappingFromLoadedValues(gui) {
 }
 
 function midiAutoMappingButtonHandler(gui, button) {
-  console.log('midiAutoMappingButtonHandler');
-
-  console.log('gui.__midi.loadedInitialValues', gui.__midi.loadedInitialValues);
   if(gui.__midi.loadedInitialValues === false) {
     // consider that we loaded initial values, even if we don't find any
     // values to load (so that this code will only run once)

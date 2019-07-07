@@ -1693,7 +1693,6 @@ var autoPlaceContainer = void 0;
 var hide = false;
 var hideableGuis = [];
 var GUI = function GUI(pars) {
-  console.log('pars', pars);
   var _this = this;
   var params = pars || {};
   this.domElement = document.createElement('div');
@@ -2500,7 +2499,6 @@ function listenMidiMessages(gui) {
       }, 50);
     }
     message = parseMidiMessage(message);
-    console.log('message', message);
     if (gui.__midi.debug) {
       var textarea = document.querySelector('#dg-midi-debug textarea');
       var messageParts = Object.keys(message).sort().map(function (key) {
@@ -2548,7 +2546,9 @@ function listenMidiMessages(gui) {
       }
       var previouslySetController = gui.__midi.settings.mapping[inputId][message.note];
       gui.__midi.settings.mapping[inputId][message.note] = gui.__midi.autoMappingCurrentController;
-      markPresetModified(gui, true);
+      if (gui.__preset_select) {
+        markPresetModified(gui, true);
+      }
       var controllerEl = gui.__midi.autoMappingCurrentController.__li;
       dom.removeClass(controllerEl, 'midiMappingNotSet');
       dom.addClass(controllerEl, 'midiMappingSet');
@@ -2605,7 +2605,6 @@ function allControllersWalker(currGui, callback) {
   });
 }
 function midiSetMappingFromLoadedValues(gui) {
-  console.log('midiSetMappingFromLoadedValues');
   function findInputIdFromInputName(inputName) {
     var foundInputId = null;
     gui.__midi.access.inputs.forEach(function (input) {
@@ -2619,26 +2618,19 @@ function midiSetMappingFromLoadedValues(gui) {
   allControllersWalker(gui, function (controller) {
     propertyToControllerMap[controller.property] = controller;
   });
-  console.log('propertyToControllerMap', propertyToControllerMap);
-  console.log('gui.load', gui.load);
-  console.log('gui.load.midiMapping', gui.load.midiMapping);
   if (typeof gui.load !== 'undefined' && typeof gui.load.midiMapping !== 'undefined') {
     Object.keys(gui.load.midiMapping).forEach(function (inputName) {
       var foundInputId = findInputIdFromInputName(inputName);
-      console.log('foundInputId', foundInputId);
       if (foundInputId === null) {
         return;
       }
       Object.keys(gui.load.midiMapping[inputName]).forEach(function (mappedNote) {
         var mappedNoteInt = parseInt(mappedNote);
         var mappedProperty = gui.load.midiMapping[inputName][mappedNote];
-        console.log('mappedNoteInt', mappedNoteInt);
-        console.log('mappedProperty', mappedProperty);
         if (typeof propertyToControllerMap[mappedProperty] === 'undefined') {
           return;
         }
         var foundController = propertyToControllerMap[mappedProperty];
-        console.log('foundController', foundController);
         if (typeof gui.__midi.settings.mapping[foundInputId] === 'undefined') {
           gui.__midi.settings.mapping[foundInputId] = {};
         }
@@ -2648,8 +2640,6 @@ function midiSetMappingFromLoadedValues(gui) {
   }
 }
 function midiAutoMappingButtonHandler(gui, button) {
-  console.log('midiAutoMappingButtonHandler');
-  console.log('gui.__midi.loadedInitialValues', gui.__midi.loadedInitialValues);
   if (gui.__midi.loadedInitialValues === false) {
     gui.__midi.loadedInitialValues = true;
     midiSetMappingFromLoadedValues(gui);
