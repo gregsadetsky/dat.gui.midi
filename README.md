@@ -26,9 +26,11 @@ Then, after initializing the GUI, add the MIDI functionality:
 ## Future
 
 - Better/different support for color controllers (beyond hue control)
+- Automated testing with mock MIDI interfaces/messages..?
+- Add gif/demo of automapping feature into readme
 - Refactor code into separate class
 - Consider opening a PR / merging into dat.GUI repo (if there's interest)
-- Automated testing with mock MIDI interfaces/messages..?
+- Fork dat.gui so that this repo is connected to the upstream one
 
 ## Tested MIDI devices
 
