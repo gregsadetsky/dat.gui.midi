@@ -1,5 +1,7 @@
 # dat.GUI.midi
 
+<img src="demo.gif" width="640">
+
 ## What is this?
 
 This is an _experimental_ fork of [dat.GUI](https://github.com/dataarts/dat.gui) to add support for MIDI controllers to all existing dat.GUI applications.
